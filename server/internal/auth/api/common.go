@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"mayfly-go/internal/auth/config"
 	msgapp "mayfly-go/internal/msg/application"
@@ -11,6 +12,7 @@ import (
 	"mayfly-go/pkg/cache"
 	"mayfly-go/pkg/otp"
 	"mayfly-go/pkg/req"
+	"mayfly-go/pkg/utils/collx"
 	"mayfly-go/pkg/utils/jsonx"
 	"mayfly-go/pkg/utils/netx"
 	"mayfly-go/pkg/utils/stringx"
@@ -29,7 +31,7 @@ func LastLoginCheck(account *sysentity.Account, accountLoginSecurity *config.Acc
 	biz.IsTrue(account.IsEnable(), "该账号不可用")
 	username := account.Username
 
-	res := map[string]any{
+	res := collx.M{
 		"name":          account.Name,
 		"username":      username,
 		"lastLoginTime": account.LastLoginTime,
@@ -39,7 +41,9 @@ func LastLoginCheck(account *sysentity.Account, accountLoginSecurity *config.Acc
 	// 默认为不校验otp
 	otpStatus := OtpStatusNone
 	// 访问系统使用的token
-	accessToken := req.CreateToken(account.Id, username)
+	accessToken, err := req.CreateToken(account.Id, username)
+	biz.ErrIsNilAppendErr(err, "token创建失败: %s")
+
 	// 若系统配置中设置开启otp双因素校验，则进行otp校验
 	if accountLoginSecurity.UseOtp {
 		otpInfo, otpurl, otpToken := useOtp(account, accountLoginSecurity.OtpIssuer, accessToken)
@@ -61,7 +65,7 @@ func LastLoginCheck(account *sysentity.Account, accountLoginSecurity *config.Acc
 }
 
 func useOtp(account *sysentity.Account, otpIssuer, accessToken string) (*OtpVerifyInfo, string, string) {
-	account.OtpSecretDecrypt()
+	biz.ErrIsNil(account.OtpSecretDecrypt())
 	otpSecret := account.OtpSecret
 	// 修改状态为已注册
 	otpStatus := OtpStatusReg
@@ -105,7 +109,7 @@ func saveLogin(account *sysentity.Account, ip string) {
 	updateAccount.Id = account.Id
 	updateAccount.LastLoginIp = ip
 	// 偷懒为了方便直接获取accountApp
-	sysapp.GetAccountApp().Update(updateAccount)
+	biz.ErrIsNil(sysapp.GetAccountApp().Update(context.TODO(), updateAccount))
 
 	// 创建登录消息
 	loginMsg := &msgentity.Msg{
@@ -116,5 +120,5 @@ func saveLogin(account *sysentity.Account, ip string) {
 	loginMsg.CreateTime = &now
 	loginMsg.Creator = account.Username
 	loginMsg.CreatorId = account.Id
-	msgapp.GetMsgApp().Create(loginMsg)
+	msgapp.GetMsgApp().Create(context.TODO(), loginMsg)
 }

@@ -2,27 +2,28 @@ package router
 
 import (
 	"mayfly-go/internal/machine/api"
-	"mayfly-go/internal/machine/application"
-	tagapp "mayfly-go/internal/tag/application"
+	"mayfly-go/pkg/biz"
+	"mayfly-go/pkg/ioc"
 	"mayfly-go/pkg/req"
 
 	"github.com/gin-gonic/gin"
 )
 
 func InitMachineRouter(router *gin.RouterGroup) {
-	m := &api.Machine{
-		MachineApp: application.GetMachineApp(),
-		TagApp:     tagapp.GetTagTreeApp(),
-	}
+	m := new(api.Machine)
+	biz.ErrIsNil(ioc.Inject(m))
+
+	dashbord := new(api.Dashbord)
+	biz.ErrIsNil(ioc.Inject(dashbord))
 
 	machines := router.Group("machines")
 	{
 		saveMachineP := req.NewPermission("machine:update")
 
 		reqs := [...]*req.Conf{
-			req.NewGet("", m.Machines),
+			req.NewGet("dashbord", dashbord.Dashbord),
 
-			req.NewGet("/tags", m.MachineTags),
+			req.NewGet("", m.Machines),
 
 			req.NewGet(":machineId/stats", m.MachineStats),
 
@@ -40,8 +41,11 @@ func InitMachineRouter(router *gin.RouterGroup) {
 
 			req.NewDelete(":machineId/close-cli", m.CloseCli).Log(req.NewLogSave("关闭机器客户端")).RequiredPermissionCode("machine:close-cli"),
 
-			// 获取机器终端回放记录的相应文件夹名或文件名,目前具有保存机器信息的权限标识才有权限查看终端回放
-			req.NewGet("rec/names", m.MachineRecDirNames).RequiredPermission(saveMachineP),
+			// 获取机器终端回放记录列表,目前具有保存机器信息的权限标识才有权限查看终端回放
+			req.NewGet(":machineId/term-recs", m.MachineTermOpRecords).RequiredPermission(saveMachineP),
+
+			// 获取机器终端回放记录
+			req.NewGet(":machineId/term-recs/:recId", m.MachineTermOpRecord).RequiredPermission(saveMachineP),
 		}
 
 		req.BatchSetGroup(machines, reqs[:])

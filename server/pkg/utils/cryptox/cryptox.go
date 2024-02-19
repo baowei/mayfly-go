@@ -13,6 +13,8 @@ import (
 	"encoding/pem"
 	"errors"
 	"mayfly-go/pkg/cache"
+	"mayfly-go/pkg/logx"
+	"os"
 
 	"golang.org/x/crypto/bcrypt"
 )
@@ -66,7 +68,7 @@ func GenerateRSAKey(bits int) (string, string, error) {
 		return publicKeyStr, privateKeyStr, err
 	}
 	//创建一个pem.Block结构体对象
-	publicBlock := pem.Block{Type: "RSA Public Key", Bytes: X509PublicKey}
+	publicBlock := pem.Block{Type: "PUBLIC KEY", Bytes: X509PublicKey}
 
 	publicBuf := new(bytes.Buffer)
 	pem.Encode(publicBuf, &publicBlock)
@@ -128,37 +130,92 @@ func DefaultRsaDecrypt(data string, useBase64 bool) (string, error) {
 	return string(val), nil
 }
 
-const publicKeyK = "mayfly:public-key"
-const privateKeyK = "mayfly:private-key"
+const (
+	// 公钥文件路径
+	publicKeyFile = "./mayfly_rsa.pub"
+	// 私钥文件路径
+	privateKeyFile = "./mayfly_rsa"
+
+	publicKeyK  = "mayfly:public-key"
+	privateKeyK = "mayfly:private-key"
+)
 
 // 获取系统的RSA公钥
 func GetRsaPublicKey() (string, error) {
-	publicKey := cache.GetStr(publicKeyK)
-	if publicKey != "" {
-		return publicKey, nil
+	if cache.UseRedisCache() {
+		publicKey := cache.GetStr(publicKeyK)
+		if publicKey != "" {
+			return publicKey, nil
+		}
+	} else {
+		content, err := os.ReadFile(publicKeyFile)
+		if err != nil {
+			publicKey := cache.GetStr(publicKeyK)
+			if publicKey != "" {
+				return publicKey, nil
+			}
+		} else {
+			return string(content), nil
+		}
 	}
-	privateKey, publicKey, err := GenerateRSAKey(1024)
-	if err != nil {
-		return "", err
-	}
-	cache.SetStr(publicKeyK, publicKey, -1)
-	cache.SetStr(privateKeyK, privateKey, -1)
-	return publicKey, nil
+
+	_, pubKey, err := GenerateAndSaveRSAKey()
+	return pubKey, err
 }
 
 // 获取系统私钥
 func GetRsaPrivateKey() (string, error) {
-	privateKey := cache.GetStr(privateKeyK)
-	if privateKey != "" {
-		return privateKey, nil
+	if cache.UseRedisCache() {
+		priKey := cache.GetStr(privateKeyK)
+		if priKey != "" {
+			return priKey, nil
+		}
+	} else {
+		content, err := os.ReadFile(privateKeyFile)
+		if err != nil {
+			priKey := cache.GetStr(privateKeyK)
+			if priKey != "" {
+				return priKey, nil
+			}
+		} else {
+			return string(content), nil
+		}
 	}
+
+	priKey, _, err := GenerateAndSaveRSAKey()
+	return priKey, err
+}
+
+// 生成并保存rsa key，优先保存于磁盘，若磁盘保存失败，则保存至缓存
+//
+// 依次返回 privateKey, publicKey, error
+func GenerateAndSaveRSAKey() (string, string, error) {
 	privateKey, publicKey, err := GenerateRSAKey(1024)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	cache.SetStr(publicKeyK, publicKey, -1)
-	cache.SetStr(privateKeyK, privateKey, -1)
-	return privateKey, nil
+
+	// 如果使用了redis缓存，则优先存入redis
+	if cache.UseRedisCache() {
+		logx.Debug("系统配置了redis, rsa存入redis")
+		cache.SetStr(privateKeyK, privateKey, -1)
+		cache.SetStr(publicKeyK, publicKey, -1)
+		return privateKey, publicKey, nil
+	}
+
+	err = os.WriteFile(privateKeyFile, []byte(privateKey), 0644)
+	if err != nil {
+		logx.ErrorTrace("RSA私钥写入磁盘文件失败, 使用缓存存储该私钥", err)
+		cache.SetStr(privateKeyK, privateKey, -1)
+	}
+
+	err = os.WriteFile(publicKeyFile, []byte(publicKey), 0644)
+	if err != nil {
+		logx.ErrorTrace("RSA公钥写入磁盘文件失败, 使用缓存存储该公钥", err)
+		cache.SetStr(publicKeyK, publicKey, -1)
+	}
+
+	return privateKey, publicKey, nil
 }
 
 // AesEncrypt 加密
@@ -239,5 +296,8 @@ func pkcs7UnPadding(data []byte) ([]byte, error) {
 	}
 	//获取填充的个数
 	unPadding := int(data[length-1])
+	if unPadding > length {
+		return nil, errors.New("解密字符串时去除填充个数超出字符串长度")
+	}
 	return data[:(length - unPadding)], nil
 }

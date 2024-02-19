@@ -1,5 +1,5 @@
 declare interface UserInfoState<T = any> {
-    userInfo: any;
+    userInfo: T;
 }
 
 declare interface ThemeConfigState {
@@ -40,8 +40,8 @@ declare interface ThemeConfigState {
         isDark: boolean;
         isGrayscale: boolean;
         isInvert: boolean;
-        isWartermark: boolean;
-        wartermarkText: string;
+        isWatermark: boolean;
+        watermarkText: Array<string>;
         tagsStyle: string;
         animation: string;
         columnsAsideStyle: string;
@@ -49,6 +49,7 @@ declare interface ThemeConfigState {
         isRequestRoutes: boolean;
         globalTitle: string;
         globalViceTitle: string;
+        logoIcon: string;
         globalI18n: string;
         globalComponentSize: string;
         terminalForeground: string;
@@ -57,13 +58,45 @@ declare interface ThemeConfigState {
         terminalFontSize: number;
         terminalFontWeight: string | any;
         editorTheme: string;
+
+        defaultListPageSize: number;
     };
 }
 
+declare interface TagsView {
+    /**
+     * 路径
+     */
+    path: string;
+
+    /**
+     * 标题
+     */
+    title: string;
+
+    /**
+     * router name
+     */
+    name: string;
+
+    /**
+     * router query
+     */
+    query: any;
+
+    /**
+     * 图标
+     */
+    icon: string;
+
+    isAffix: boolean;
+    isKeepAlive: boolean;
+    isHide?: boolean;
+}
+
 // TagsView 路由列表
-declare interface TagsViewRoutesState<T = any> {
-    tagsViewRoutes: T[];
-    isTagsViewCurrenFull: Boolean;
+declare interface TagsViewsState<> {
+    tagsViews: TagsView[];
 }
 
 // 路由列表

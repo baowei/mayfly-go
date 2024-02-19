@@ -1,41 +1,16 @@
 package persistence
 
-import "mayfly-go/internal/machine/domain/repository"
-
-var (
-	machineRepo              repository.Machine              = newMachineRepo()
-	machineFileRepo          repository.MachineFile          = newMachineFileRepo()
-	machineScriptRepo        repository.MachineScript        = newMachineScriptRepo()
-	authCertRepo             repository.AuthCert             = newAuthCertRepo()
-	machineCropJobRepo       repository.MachineCronJob       = newMachineCronJobRepo()
-	machineCropJobExecRepo   repository.MachineCronJobExec   = newMachineCronJobExecRepo()
-	machineCronJobRelateRepo repository.MachineCronJobRelate = newMachineCropJobRelateRepo()
+import (
+	"mayfly-go/pkg/ioc"
 )
 
-func GetMachineRepo() repository.Machine {
-	return machineRepo
-}
-
-func GetMachineFileRepo() repository.MachineFile {
-	return machineFileRepo
-}
-
-func GetMachineScriptRepo() repository.MachineScript {
-	return machineScriptRepo
-}
-
-func GetAuthCertRepo() repository.AuthCert {
-	return authCertRepo
-}
-
-func GetMachineCronJobRepo() repository.MachineCronJob {
-	return machineCropJobRepo
-}
-
-func GetMachineCronJobExecRepo() repository.MachineCronJobExec {
-	return machineCropJobExecRepo
-}
-
-func GetMachineCronJobRelateRepo() repository.MachineCronJobRelate {
-	return machineCronJobRelateRepo
+func Init() {
+	ioc.Register(newMachineRepo(), ioc.WithComponentName("MachineRepo"))
+	ioc.Register(newMachineFileRepo(), ioc.WithComponentName("MachineFileRepo"))
+	ioc.Register(newMachineScriptRepo(), ioc.WithComponentName("MachineScriptRepo"))
+	ioc.Register(newAuthCertRepo(), ioc.WithComponentName("AuthCertRepo"))
+	ioc.Register(newMachineCronJobRepo(), ioc.WithComponentName("MachineCronJobRepo"))
+	ioc.Register(newMachineCronJobExecRepo(), ioc.WithComponentName("MachineCronJobExecRepo"))
+	ioc.Register(newMachineCronJobRelateRepo(), ioc.WithComponentName("MachineCronJobRelateRepo"))
+	ioc.Register(newMachineTermOpRepoImpl(), ioc.WithComponentName("MachineTermOpRepo"))
 }

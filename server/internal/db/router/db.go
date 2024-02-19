@@ -2,9 +2,8 @@ package router
 
 import (
 	"mayfly-go/internal/db/api"
-	"mayfly-go/internal/db/application"
-	msgapp "mayfly-go/internal/msg/application"
-	tagapp "mayfly-go/internal/tag/application"
+	"mayfly-go/pkg/biz"
+	"mayfly-go/pkg/ioc"
 	"mayfly-go/pkg/req"
 
 	"github.com/gin-gonic/gin"
@@ -13,29 +12,25 @@ import (
 func InitDbRouter(router *gin.RouterGroup) {
 	db := router.Group("dbs")
 
-	d := &api.Db{
-		InstanceApp:  application.GetInstanceApp(),
-		DbApp:        application.GetDbApp(),
-		DbSqlExecApp: application.GetDbSqlExecApp(),
-		MsgApp:       msgapp.GetMsgApp(),
-		TagApp:       tagapp.GetTagTreeApp(),
-	}
+	d := new(api.Db)
+	biz.ErrIsNil(ioc.Inject(d))
+
+	dashbord := new(api.Dashbord)
+	biz.ErrIsNil(ioc.Inject(dashbord))
 
 	reqs := [...]*req.Conf{
+		req.NewGet("dashbord", dashbord.Dashbord),
+
 		// 获取数据库列表
 		req.NewGet("", d.Dbs),
-
-		req.NewGet("/tags", d.DbTags),
 
 		req.NewPost("", d.Save).Log(req.NewLogSave("db-保存数据库信息")),
 
 		req.NewDelete(":dbId", d.DeleteDb).Log(req.NewLogSave("db-删除数据库信息")),
 
-		req.NewGet(":dbId/t-infos", d.TableInfos),
+		req.NewGet(":dbId/t-create-ddl", d.GetTableDDL),
 
-		req.NewGet(":dbId/t-index", d.TableIndex),
-
-		req.NewGet(":dbId/t-create-ddl", d.GetCreateTableDdl),
+		req.NewGet(":dbId/pg/schemas", d.GetSchemas),
 
 		req.NewPost(":dbId/exec-sql", d.ExecSql).Log(req.NewLog("db-执行Sql")),
 
@@ -43,20 +38,22 @@ func InitDbRouter(router *gin.RouterGroup) {
 
 		req.NewGet(":dbId/dump", d.DumpSql).Log(req.NewLogSave("db-导出sql文件")).NoRes(),
 
-		req.NewGet(":dbId/t-metadata", d.TableMA),
+		req.NewGet(":dbId/t-infos", d.TableInfos),
+
+		req.NewGet(":dbId/t-index", d.TableIndex),
 
 		req.NewGet(":dbId/c-metadata", d.ColumnMA),
 
 		req.NewGet(":dbId/hint-tables", d.HintTables),
 
-		// 用户sql相关
-		req.NewPost(":dbId/sql", d.SaveSql),
+		req.NewGet(":dbId/restore-task", d.GetRestoreTask),
 
-		req.NewGet(":dbId/sql", d.GetSql),
+		req.NewPost(":dbId/restore-task", d.SaveRestoreTask).
+			Log(req.NewLogSave("db-保存数据库恢复任务")),
 
-		req.NewDelete(":dbId/sql", d.DeleteSql),
+		req.NewGet(":dbId/restore-histories", d.GetRestoreHistories),
 
-		req.NewGet(":dbId/sql-names", d.GetSqlNames),
+		req.NewPost(":dbId/copy-table", d.CopyTable),
 	}
 
 	req.BatchSetGroup(db, reqs[:])

@@ -1,11 +1,12 @@
 package application
 
-import "mayfly-go/internal/redis/infrastructure/persistence"
-
-var (
-	redisApp Redis = newRedisApp(persistence.GetRedisRepo())
+import (
+	"mayfly-go/internal/redis/infrastructure/persistence"
+	"mayfly-go/pkg/ioc"
 )
 
-func GetRedisApp() Redis {
-	return redisApp
+func InitIoc() {
+	persistence.Init()
+
+	ioc.Register(new(redisAppImpl), ioc.WithComponentName("RedisApp"))
 }

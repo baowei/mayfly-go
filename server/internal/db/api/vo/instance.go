@@ -2,14 +2,14 @@ package vo
 
 import "time"
 
-type SelectDataInstanceVO struct {
-	//models.BaseModel
+type InstanceListVO struct {
 	Id         *int64     `json:"id"`
 	Name       *string    `json:"name"`
 	Host       *string    `json:"host"`
 	Port       *int       `json:"port"`
 	Type       *string    `json:"type"`
 	Params     *string    `json:"params"`
+	Sid        *string    `json:"sid"`
 	Username   *string    `json:"username"`
 	Remark     *string    `json:"remark"`
 	CreateTime *time.Time `json:"createTime"`

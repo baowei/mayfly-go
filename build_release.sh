@@ -56,7 +56,7 @@ function build() {
     if [ "${os}" == "windows" ];then
         execFileName="${execFileName}.exe"
     fi
-    CGO_ENABLE=0 GOOS=${os} GOARCH=${arch} go build -o ${execFileName} main.go
+    CGO_ENABLE=0 GOOS=${os} GOARCH=${arch} go build -ldflags=-w -o ${execFileName} main.go
 
     if [ -d ${toFolder} ] ; then
         echo_green "目标文件夹已存在,清空文件夹"
@@ -74,12 +74,13 @@ function build() {
     # fi
 
     if [ "${copyDocScript}" == "1" ] ; then
-        echo_green "拷贝脚本等资源文件[config.yml.example、mayfly-go.sql、readme.txt、startup.sh、shutdown.sh]"
+        echo_green "拷贝脚本等资源文件[config.yml.example、mayfly-go.sql、mayfly-go.sqlite、readme.txt、startup.sh、shutdown.sh]"
         cp ${server_folder}/config.yml.example ${toFolder}
-        cp ${server_folder}/mayfly-go.sql ${toFolder}
         cp ${server_folder}/readme.txt ${toFolder}
-        cp ${server_folder}/startup.sh ${toFolder}
-        cp ${server_folder}/shutdown.sh ${toFolder}
+        cp ${server_folder}/resources/script/startup.sh ${toFolder}
+        cp ${server_folder}/resources/script/shutdown.sh ${toFolder}
+        cp ${server_folder}/resources/script/sql/mayfly-go.sql ${toFolder}
+        cp ${server_folder}/resources/data/mayfly-go.sqlite ${toFolder}
     fi
 
     echo_yellow ">>>>>>>>>>>>>>>>>>>${os}-${arch}打包构建完成<<<<<<<<<<<<<<<<<<<<\n"

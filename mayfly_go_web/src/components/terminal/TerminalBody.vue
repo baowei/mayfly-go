@@ -8,7 +8,7 @@
 
 <script lang="ts" setup>
 import 'xterm/css/xterm.css';
-import { Terminal } from 'xterm';
+import { ITheme, Terminal } from 'xterm';
 import { FitAddon } from 'xterm-addon-fit';
 import { SearchAddon } from 'xterm-addon-search';
 import { WebLinksAddon } from 'xterm-addon-web-links';
@@ -19,6 +19,7 @@ import { ref, nextTick, reactive, onMounted, onBeforeUnmount, watch } from 'vue'
 import TerminalSearch from './TerminalSearch.vue';
 import { debounce } from 'lodash';
 import { TerminalStatus } from './common';
+import { useEventListener } from '@vueuse/core';
 
 const props = defineProps({
     /**
@@ -91,12 +92,13 @@ function init() {
         cursorBlink: true,
         disableStdin: false,
         allowProposedApi: true,
+        fastScrollModifier: 'ctrl',
         theme: {
             foreground: themeConfig.value.terminalForeground || '#7e9192', //字体
             background: themeConfig.value.terminalBackground || '#002833', //背景色
             cursor: themeConfig.value.terminalCursor || '#268F81', //设置光标
             // cursorAccent: "red",  // 光标停止颜色
-        } as any,
+        } as ITheme,
     });
     term.open(terminalRef.value);
 
@@ -104,7 +106,6 @@ function init() {
     const fitAddon = new FitAddon();
     state.addon.fit = fitAddon;
     term.loadAddon(fitAddon);
-    fitTerminal();
 
     // 注册搜索组件
     const searchAddon = new SearchAddon();
@@ -116,6 +117,7 @@ function init() {
     state.addon.weblinks = weblinks;
     term.loadAddon(weblinks);
 
+    fitTerminal();
     // 初始化websocket
     initSocket();
 }
@@ -144,10 +146,8 @@ const onConnected = () => {
 
     state.status = TerminalStatus.Connected;
 
-    // resize
-    sendResize(term.cols, term.rows);
     // 注册窗口大小监听器
-    window.addEventListener('resize', debounce(fitTerminal, 400));
+    useEventListener('resize', debounce(resize, 400));
 
     focus();
 
@@ -159,17 +159,19 @@ const onConnected = () => {
 
 // 自适应终端
 const fitTerminal = () => {
-    const dimensions = state.addon.fit && state.addon.fit.proposeDimensions();
+    // 获取建议的宽度和高度
+    const dimensions = state.addon.fit?.proposeDimensions();
     if (!dimensions) {
         return;
     }
     if (dimensions?.cols && dimensions?.rows) {
+        // 调整终端的列数和行数
         term.resize(dimensions.cols, dimensions.rows);
     }
 };
 
 const focus = () => {
-    setTimeout(() => term.focus(), 400);
+    setTimeout(() => term.focus(), 100);
 };
 
 const clear = () => {
@@ -180,7 +182,8 @@ const clear = () => {
 
 function initSocket() {
     if (props.socketUrl) {
-        socket = new WebSocket(props.socketUrl);
+        let socketUrl = `${props.socketUrl}&rows=${term?.rows}&cols=${term?.cols}`;
+        socket = new WebSocket(socketUrl);
     }
 
     // 监听socket连接
@@ -197,8 +200,6 @@ function initSocket() {
 
     socket.onclose = (e: CloseEvent) => {
         console.log('terminal socket close...', e.reason);
-        // 关闭窗口大小监听器
-        window.removeEventListener('resize', debounce(fitTerminal, 100));
         // 清除 ping
         pingInterval && clearInterval(pingInterval);
         state.status = TerminalStatus.Disconnected;
@@ -267,7 +268,13 @@ const getStatus = (): TerminalStatus => {
     return state.status;
 };
 
-defineExpose({ init, fitTerminal, focus, clear, close, getStatus });
+const resize = () => {
+    nextTick(() => {
+        state.addon.fit.fit();
+    });
+};
+
+defineExpose({ init, fitTerminal, focus, clear, close, getStatus, sendResize, resize });
 </script>
 <style lang="scss">
 #terminal-body {

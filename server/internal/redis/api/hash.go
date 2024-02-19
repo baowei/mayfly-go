@@ -6,12 +6,12 @@ import (
 	"mayfly-go/pkg/biz"
 	"mayfly-go/pkg/ginx"
 	"mayfly-go/pkg/req"
-	"mayfly-go/pkg/utils/jsonx"
+	"mayfly-go/pkg/utils/collx"
 	"time"
 )
 
 func (r *Redis) Hscan(rc *req.Ctx) {
-	ri, key := r.checkKeyAndGetRedisIns(rc)
+	ri, key := r.checkKeyAndGetRedisConn(rc)
 	g := rc.GinCtx
 	count := ginx.QueryInt(g, "count", 10)
 	match := g.Query("match")
@@ -24,7 +24,7 @@ func (r *Redis) Hscan(rc *req.Ctx) {
 	keySize, err := cmdable.HLen(contextTodo, key).Result()
 	biz.ErrIsNilAppendErr(err, "hlen err: %s")
 
-	rc.ResData = map[string]any{
+	rc.ResData = collx.M{
 		"keys":    keys,
 		"cursor":  nextCursor,
 		"keySize": keySize,
@@ -32,17 +32,17 @@ func (r *Redis) Hscan(rc *req.Ctx) {
 }
 
 func (r *Redis) Hdel(rc *req.Ctx) {
-	ri, key := r.checkKeyAndGetRedisIns(rc)
+	ri, key := r.checkKeyAndGetRedisConn(rc)
 	field := rc.GinCtx.Query("field")
 
-	rc.ReqParam = jsonx.Kvs("redis", ri.Info, "key", key, "field", field)
+	rc.ReqParam = collx.Kvs("redis", ri.Info, "key", key, "field", field)
 	delRes, err := ri.GetCmdable().HDel(context.TODO(), key, field).Result()
 	biz.ErrIsNilAppendErr(err, "hdel err: %s")
 	rc.ResData = delRes
 }
 
 func (r *Redis) Hget(rc *req.Ctx) {
-	ri, key := r.checkKeyAndGetRedisIns(rc)
+	ri, key := r.checkKeyAndGetRedisConn(rc)
 	field := rc.GinCtx.Query("field")
 
 	res, err := ri.GetCmdable().HGet(context.TODO(), key, field).Result()
@@ -56,21 +56,21 @@ func (r *Redis) Hset(rc *req.Ctx) {
 	ginx.BindJsonAndValid(g, hashValue)
 
 	hv := hashValue.Value[0]
-	ri := r.getRedisIns(rc)
-	rc.ReqParam = jsonx.Kvs("redis", ri.Info, "hash", hv)
+	ri := r.getRedisConn(rc)
+	rc.ReqParam = collx.Kvs("redis", ri.Info, "hash", hv)
 
 	res, err := ri.GetCmdable().HSet(context.TODO(), hashValue.Key, hv["field"].(string), hv["value"]).Result()
 	biz.ErrIsNilAppendErr(err, "hset失败: %s")
 	rc.ResData = res
 }
 
-func (r *Redis) SetHashValue(rc *req.Ctx) {
+func (r *Redis) SaveHashValue(rc *req.Ctx) {
 	g := rc.GinCtx
 	hashValue := new(form.HashValue)
 	ginx.BindJsonAndValid(g, hashValue)
 
-	ri := r.getRedisIns(rc)
-	rc.ReqParam = jsonx.Kvs("redis", ri.Info, "hash", hashValue)
+	ri := r.getRedisConn(rc)
+	rc.ReqParam = collx.Kvs("redis", ri.Info, "hash", hashValue)
 	cmd := ri.GetCmdable()
 
 	key := hashValue.Key

@@ -52,13 +52,13 @@
                                 title="最小化"
                             />
 
-                            <!-- <SvgIcon name="FullScreen" @click="handlerFullScreen(openTerminal)" :size="20" class="pointer-icon mr10" title="全屏|退出全屏" /> -->
+                            <SvgIcon name="FullScreen" @click="handlerFullScreen(openTerminal)" :size="20" class="pointer-icon mr10" title="全屏|退出全屏" />
 
                             <SvgIcon name="Close" class="pointer-icon" @click="close(openTerminal.terminalId)" title="关闭" :size="20" />
                         </div>
                     </div>
                 </template>
-                <div class="terminal-wrapper" style="height: calc(100vh - 215px)">
+                <div class="terminal-wrapper" :style="{ height: `calc(100vh - ${openTerminal.fullscreen ? '49px' : '200px'})` }">
                     <TerminalBody
                         @status-change="terminalStatusChange(openTerminal.terminalId, $event)"
                         :ref="(el) => setTerminalRef(el, openTerminal.terminalId)"
@@ -78,7 +78,7 @@
                 size="small"
                 @click="maximize(minimizeTerminal.terminalId)"
             >
-                <el-tooltip effect="customized" :content="minimizeTerminal.desc" placement="top">
+                <el-tooltip :content="minimizeTerminal.desc" placement="top">
                     <span>
                         {{ minimizeTerminal.title }}
                     </span>
@@ -230,6 +230,16 @@ function maximize(terminalId: any) {
     }, 250);
 }
 
+const handlerFullScreen = (terminal: any) => {
+    terminal.fullscreen = !terminal.fullscreen;
+    const terminalRef = openTerminalRefs[terminal.terminalId];
+    // fit
+    setTimeout(() => {
+        terminalRef?.fitTerminal();
+        terminalRef?.focus();
+    }, 250);
+};
+
 const closeMinimizeTerminal = (terminalId: any) => {
     delete state.minimizeTerminals[terminalId];
     close(terminalId);
@@ -249,9 +259,15 @@ defineExpose({
         padding: 10px;
     }
 
-    // .terminal-dialog {
-    //     height: calc(100vh - 200px) !important;
-    // }
+    .el-dialog {
+        padding: 1px 1px;
+    }
+
+    // 取消body最大高度，否则全屏有问题
+    .el-dialog__body {
+        max-height: 100% !important;
+        overflow: hidden !important;
+    }
 
     .el-overlay .el-overlay-dialog .el-dialog .el-dialog__body {
         padding: 0px !important;

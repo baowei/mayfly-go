@@ -2,6 +2,7 @@ import vue from '@vitejs/plugin-vue';
 import { resolve } from 'path';
 import type { UserConfig } from 'vite';
 import { loadEnv } from './src/common/utils/viteBuild';
+import { CodeInspectorPlugin } from 'code-inspector-plugin';
 
 const pathResolve = (dir: string): any => {
     return resolve(__dirname, '.', dir);
@@ -14,7 +15,12 @@ const alias: Record<string, string> = {
 };
 
 const viteConfig: UserConfig = {
-    plugins: [vue()],
+    plugins: [
+        vue(),
+        CodeInspectorPlugin({
+            bundler: 'vite',
+        }),
+    ],
     root: process.cwd(),
     resolve: {
         alias,
@@ -29,7 +35,7 @@ const viteConfig: UserConfig = {
         open: VITE_OPEN,
         proxy: {
             '/api': {
-                target: 'http://localhost:8888',
+                target: 'http://localhost:18888',
                 ws: true,
                 changeOrigin: true,
             },
@@ -42,9 +48,9 @@ const viteConfig: UserConfig = {
         chunkSizeWarningLimit: 1500,
         rollupOptions: {
             output: {
-                entryFileNames: `assets/[hash].[name].js`,
-                chunkFileNames: `assets/[hash].[name].js`,
-                assetFileNames: `assets/[name].[hash].[ext]`,
+                entryFileNames: `assets/[name]-[hash].js`,
+                chunkFileNames: `assets/[name]-[hash].js`,
+                assetFileNames: `assets/[name]-[hash].[ext]`,
                 compact: true,
                 manualChunks: {
                     vue: ['vue', 'vue-router', 'pinia'],

@@ -12,23 +12,28 @@
                 </div>
             </div>
             <div class="right">
-                <img src="@/assets/image/401.png" />
+                <img src="@/assets/image/401.svg" />
             </div>
         </div>
     </div>
 </template>
 
 <script lang="ts">
-import { useRouter } from 'vue-router';
-import { clearSession } from '@/common/utils/storage.ts';
+import { useRouter, useRoute } from 'vue-router';
+import { clearSession } from '@/common/utils/storage';
+import { URL_LOGIN } from '@/router/staticRouter';
+
 export default {
     name: '401',
     setup() {
         const router = useRouter();
+        const route = useRoute();
+
         const onSetAuth = () => {
             clearSession();
-            router.push('/login');
+            router.push({ path: URL_LOGIN, query: route.query });
         };
+
         return {
             onSetAuth,
         };
@@ -39,7 +44,7 @@ export default {
 <style scoped lang="scss">
 .error {
     height: 100%;
-    background-color: white;
+    background-color: var(--bg-main-color);
     display: flex;
     .error-flex {
         margin: auto;
@@ -64,7 +69,7 @@ export default {
                 }
                 .left-item-title {
                     font-size: 20px;
-                    color: #333333;
+                    // color: #333333;
                     margin: 15px 0 5px 0;
                     animation-delay: 0.1s;
                 }
@@ -93,3 +98,4 @@ export default {
     }
 }
 </style>
+@/router/staticRouter

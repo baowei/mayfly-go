@@ -3,15 +3,6 @@ package initialize
 import (
 	"fmt"
 	"io/fs"
-	auth_router "mayfly-go/internal/auth/router"
-	common_router "mayfly-go/internal/common/router"
-	db_router "mayfly-go/internal/db/router"
-	machine_router "mayfly-go/internal/machine/router"
-	mongo_router "mayfly-go/internal/mongo/router"
-	msg_router "mayfly-go/internal/msg/router"
-	redis_router "mayfly-go/internal/redis/router"
-	sys_router "mayfly-go/internal/sys/router"
-	tag_router "mayfly-go/internal/tag/router"
 	"mayfly-go/pkg/config"
 	"mayfly-go/pkg/middleware"
 	"mayfly-go/static"
@@ -19,6 +10,18 @@ import (
 
 	"github.com/gin-gonic/gin"
 )
+
+// 初始化路由函数
+type InitRouterFunc func(router *gin.RouterGroup)
+
+var (
+	initRouterFuncs = make([]InitRouterFunc, 0)
+)
+
+// 添加初始化路由函数，由各个默认自行添加
+func AddInitRouterFunc(initRouterFunc InitRouterFunc) {
+	initRouterFuncs = append(initRouterFuncs, initRouterFunc)
+}
 
 func InitRouter() *gin.Engine {
 	// server配置
@@ -34,7 +37,7 @@ func InitRouter() *gin.Engine {
 	})
 
 	// 设置静态资源
-	setStatic(router)
+	setStatic(serverConfig.ContextPath, router)
 
 	// 是否允许跨域
 	if serverConfig.Cors {
@@ -42,35 +45,27 @@ func InitRouter() *gin.Engine {
 	}
 
 	// 设置路由组
-	api := router.Group("/api")
-	{
-		common_router.Init(api)
-
-		auth_router.Init(api)
-
-		sys_router.Init(api)
-		msg_router.Init(api)
-
-		tag_router.Init(api)
-		machine_router.Init(api)
-		db_router.Init(api)
-		redis_router.Init(api)
-		mongo_router.Init(api)
+	api := router.Group(serverConfig.ContextPath + "/api")
+	// 调用所有模块注册的初始化路由函数
+	for _, initRouterFunc := range initRouterFuncs {
+		initRouterFunc(api)
 	}
+	initRouterFuncs = nil
 
 	return router
 }
 
-func setStatic(router *gin.Engine) {
+func setStatic(contextPath string, router *gin.Engine) {
 	// 使用embed打包静态资源至二进制文件中
 	fsys, _ := fs.Sub(static.Static, "static")
 	fileServer := http.FileServer(http.FS(fsys))
-	handler := WrapStaticHandler(fileServer)
-	router.GET("/", handler)
-	router.GET("/favicon.ico", handler)
-	router.GET("/config.js", handler)
+	handler := WrapStaticHandler(http.StripPrefix(contextPath, fileServer))
+
+	router.GET(contextPath+"/", handler)
+	router.GET(contextPath+"/favicon.ico", handler)
+	router.GET(contextPath+"/config.js", handler)
 	// 所有/assets/**开头的都是静态资源文件
-	router.GET("/assets/*file", handler)
+	router.GET(contextPath+"/assets/*file", handler)
 
 	// 设置静态资源
 	if staticConfs := config.Conf.Server.Static; staticConfs != nil {

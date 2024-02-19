@@ -1,9 +1,77 @@
 import openApi from './openApi';
 
 // 登录是否使用验证码配置key
-const AccountLoginSecurity = 'AccountLoginSecurity';
-const UseLoginCaptchaConfigKey = 'UseLoginCaptcha';
-const UseWartermarkConfigKey = 'UseWartermark';
+const AccountLoginSecurityKey = 'AccountLoginSecurity';
+const MachineConfigKey = 'MachineConfig';
+const SysStyleConfigKey = 'SysStyleConfig';
+
+/**
+ * 获取账号登录安全配置
+ *
+ * @returns
+ */
+export async function getAccountLoginSecurity(): Promise<any> {
+    const value = await getConfigValue(AccountLoginSecurityKey);
+    if (!value) {
+        return null;
+    }
+    const jsonValue = JSON.parse(value);
+    jsonValue.useCaptcha = convertBool(jsonValue.useCaptcha, true);
+    jsonValue.useOtp = convertBool(jsonValue.useOtp, true);
+    return jsonValue;
+}
+
+/**
+ * 获取全局系统样式配置（logo、title等）
+ *
+ * @returns
+ */
+export async function getSysStyleConfig(): Promise<any> {
+    const value = await getConfigValue(SysStyleConfigKey);
+    const defaultValue = {
+        useWatermark: true,
+    };
+    if (!value) {
+        return defaultValue;
+    }
+
+    const jsonValue = JSON.parse(value);
+    // 将字符串转为bool
+    jsonValue.useWatermark = convertBool(jsonValue.useWatermark, true);
+    return jsonValue;
+}
+
+/**
+ * 获取LDAP登录配置
+ *
+ * @returns
+ */
+export async function getLdapEnabled(): Promise<any> {
+    const value = await openApi.getLdapEnabled();
+    return convertBool(value, false);
+}
+
+/**
+ * 获取机器配置
+ *
+ * @returns
+ */
+export async function getMachineConfig(): Promise<any> {
+    const value = await getConfigValue(MachineConfigKey);
+    const defaultValue = {
+        // 默认1gb
+        uploadMaxFileSize: '1GB',
+    };
+    if (!value) {
+        return defaultValue;
+    }
+    try {
+        const jsonValue = JSON.parse(value);
+        return jsonValue;
+    } catch (e) {
+        return defaultValue;
+    }
+}
 
 /**
  * 获取系统配置值
@@ -27,54 +95,9 @@ export async function getBoolConfigValue(key: string, defaultValue: boolean): Pr
     return convertBool(value, defaultValue);
 }
 
-/**
- * 获取账号登录安全配置
- *
- * @returns
- */
-export async function getAccountLoginSecurity(): Promise<any> {
-    const value = await getConfigValue(AccountLoginSecurity);
-    if (!value) {
-        return null;
-    }
-    const jsonValue = JSON.parse(value);
-    jsonValue.useCaptcha = convertBool(jsonValue.useCaptcha, true);
-    jsonValue.useOtp = convertBool(jsonValue.useOtp, true);
-    return jsonValue;
-}
-
-/**
- * 是否使用登录验证码
- *
- * @returns
- */
-export async function useLoginCaptcha(): Promise<boolean> {
-    return await getBoolConfigValue(UseLoginCaptchaConfigKey, true);
-}
-
-/**
- * 是否启用水印
- *
- * @returns
- */
-export async function useWartermark(): Promise<boolean> {
-    return await getBoolConfigValue(UseWartermarkConfigKey, true);
-}
-
 function convertBool(value: string, defaultValue: boolean) {
     if (!value) {
         return defaultValue;
     }
     return value == '1' || value == 'true';
 }
-
-/**
- * 获取LDAP登录配置
- *
- * @returns
- */
-export async function getLdapEnabled(): Promise<any> {
-    const value = await openApi.getLdapEnabled();
-    return convertBool(value, false);
-}
-

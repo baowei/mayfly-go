@@ -2,44 +2,36 @@ package application
 
 import (
 	"mayfly-go/internal/machine/infrastructure/persistence"
+	"mayfly-go/pkg/ioc"
 )
 
-var (
-	machineFileApp MachineFile = newMachineFileApp(persistence.GetMachineFileRepo(), persistence.GetMachineRepo())
+func InitIoc() {
+	persistence.Init()
 
-	machineScriptApp MachineScript = newMachineScriptApp(persistence.GetMachineScriptRepo(), persistence.GetMachineRepo())
-
-	authCertApp AuthCert = newAuthCertApp(persistence.GetAuthCertRepo())
-
-	machineApp Machine = newMachineApp(
-		persistence.GetMachineRepo(),
-		GetAuthCertApp(),
-	)
-
-	machineCropJobApp MachineCronJob = newMachineCronJobApp(
-		persistence.GetMachineCronJobRepo(),
-		persistence.GetMachineCronJobRelateRepo(),
-		persistence.GetMachineCronJobExecRepo(),
-		GetMachineApp(),
-	)
-)
+	ioc.Register(new(machineAppImpl), ioc.WithComponentName("MachineApp"))
+	ioc.Register(new(machineFileAppImpl), ioc.WithComponentName("MachineFileApp"))
+	ioc.Register(new(machineScriptAppImpl), ioc.WithComponentName("MachineScriptApp"))
+	ioc.Register(new(authCertAppImpl), ioc.WithComponentName("AuthCertApp"))
+	ioc.Register(new(machineCronJobAppImpl), ioc.WithComponentName("MachineCronJobApp"))
+	ioc.Register(new(machineTermOpAppImpl), ioc.WithComponentName("MachineTermOpApp"))
+}
 
 func GetMachineApp() Machine {
-	return machineApp
+	return ioc.Get[Machine]("MachineApp")
 }
 
 func GetMachineFileApp() MachineFile {
-	return machineFileApp
+	return ioc.Get[MachineFile]("MachineFileApp")
 }
 
 func GetMachineScriptApp() MachineScript {
-	return machineScriptApp
-}
-
-func GetAuthCertApp() AuthCert {
-	return authCertApp
+	return ioc.Get[MachineScript]("MachineScriptApp")
 }
 
 func GetMachineCronJobApp() MachineCronJob {
-	return machineCropJobApp
+	return ioc.Get[MachineCronJob]("MachineCronJobApp")
+}
+
+func GetMachineTermOpApp() MachineTermOp {
+	return ioc.Get[MachineTermOp]("MachineTermOpApp")
 }

@@ -1,7 +1,7 @@
 <template>
-    <div class="monaco-editor" style="border: 1px solid var(--el-border-color-light, #ebeef5)">
+    <div class="monaco-editor" style="border: 1px solid var(--el-border-color-light, #ebeef5); height: 100%">
         <div class="monaco-editor-content" ref="monacoTextarea" :style="{ height: height }"></div>
-        <el-select v-if="canChangeMode" class="code-mode-select" v-model="languageMode" @change="changeLanguage">
+        <el-select v-if="canChangeMode" class="code-mode-select" v-model="languageMode" @change="changeLanguage" filterable>
             <el-option v-for="mode in languageArr" :key="mode.value" :label="mode.label" :value="mode.value"> </el-option>
         </el-select>
     </div>
@@ -9,7 +9,6 @@
 
 <script lang="ts" setup>
 import { ref, watch, toRefs, reactive, onMounted, onBeforeUnmount } from 'vue';
-// import * as monaco from 'monaco-editor';
 import * as monaco from 'monaco-editor/esm/vs/editor/editor.api';
 // 相关语言
 import 'monaco-editor/esm/vs/basic-languages/shell/shell.contribution.js';
@@ -133,7 +132,7 @@ const languageArr = [
     },
 ];
 
-const options = {
+const defaultOptions = {
     language: 'shell',
     theme: 'SolarizedLight',
     automaticLayout: true, //自适应宽高布局
@@ -155,6 +154,20 @@ const options = {
     },
 };
 
+const monacoTextarea: any = ref();
+
+let monacoEditorIns: editor.IStandaloneCodeEditor = null as any;
+let completionItemProvider: any = null;
+
+self.MonacoEnvironment = {
+    getWorker(_: any, label: string) {
+        if (label === 'json') {
+            return new JsonWorker();
+        }
+        return new EditorWorker();
+    },
+};
+
 const state = reactive({
     languageMode: 'shell',
 });
@@ -173,6 +186,7 @@ onBeforeUnmount(() => {
         monacoEditorIns.dispose();
     }
     if (completionItemProvider) {
+        console.log('unmount=> dispose completion item provider');
         completionItemProvider.dispose();
     }
 });
@@ -203,28 +217,14 @@ watch(
     }
 );
 
-const monacoTextarea: any = ref(null);
-
-let monacoEditorIns: editor.IStandaloneCodeEditor = null as any;
-let completionItemProvider: any = null;
-
-self.MonacoEnvironment = {
-    getWorker(_: any, label: string) {
-        if (label === 'json') {
-            return new JsonWorker();
-        }
-        return new EditorWorker();
-    },
-};
-
 const initMonacoEditorIns = () => {
     console.log('初始化monaco编辑器');
     // options参数参考 https://microsoft.github.io/monaco-editor/api/interfaces/monaco.editor.IStandaloneEditorConstructionOptions.html#language
     // 初始化一些主题
     monaco.editor.defineTheme('SolarizedLight', SolarizedLight);
-    options.language = state.languageMode;
-    options.theme = themeConfig.value.editorTheme;
-    monacoEditorIns = monaco.editor.create(monacoTextarea.value, Object.assign(options, props.options as any));
+    defaultOptions.language = state.languageMode;
+    defaultOptions.theme = themeConfig.value.editorTheme;
+    monacoEditorIns = monaco.editor.create(monacoTextarea.value, Object.assign(defaultOptions, props.options as any));
 
     // 监听内容改变,双向绑定
     monacoEditorIns.onDidChangeModelContent(() => {
@@ -260,6 +260,7 @@ const setEditorValue = (value: any) => {
  */
 const registerCompletionItemProvider = () => {
     if (completionItemProvider) {
+        console.log('exist competion item provider, dispose now');
         completionItemProvider.dispose();
     }
     if (state.languageMode == 'shell') {
@@ -293,13 +294,19 @@ const registeShell = () => {
 };
 
 const format = () => {
-    /*
-    触发自动格式化;
-   */
+    // 触发自动格式化;
     monacoEditorIns.trigger('', 'editor.action.formatDocument', '');
 };
 
-defineExpose({ format });
+const focus = () => {
+    monacoEditorIns.focus();
+};
+
+const getEditor = () => {
+    return monacoEditorIns;
+};
+
+defineExpose({ getEditor, format, focus });
 </script>
 
 <style lang="scss">

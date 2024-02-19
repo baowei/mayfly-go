@@ -2,8 +2,8 @@ package router
 
 import (
 	"mayfly-go/internal/redis/api"
-	"mayfly-go/internal/redis/application"
-	tagapp "mayfly-go/internal/tag/application"
+	"mayfly-go/pkg/biz"
+	"mayfly-go/pkg/ioc"
 	"mayfly-go/pkg/req"
 
 	"github.com/gin-gonic/gin"
@@ -12,10 +12,11 @@ import (
 func InitRedisRouter(router *gin.RouterGroup) {
 	redis := router.Group("redis")
 
-	rs := &api.Redis{
-		RedisApp: application.GetRedisApp(),
-		TagApp:   tagapp.GetTagTreeApp(),
-	}
+	rs := new(api.Redis)
+	biz.ErrIsNil(ioc.Inject(rs))
+
+	dashbord := new(api.Dashbord)
+	biz.ErrIsNil(ioc.Inject(dashbord))
 
 	// 保存数据权限
 	saveDataP := req.NewPermission("redis:data:save")
@@ -23,10 +24,12 @@ func InitRedisRouter(router *gin.RouterGroup) {
 	deleteDataP := req.NewPermission("redis:data:del")
 
 	reqs := [...]*req.Conf{
+		req.NewGet("dashbord", dashbord.Dashbord),
+
 		// 获取redis list
 		req.NewGet("", rs.RedisList),
 
-		req.NewGet("/tags", rs.RedisTags),
+		req.NewPost("/test-conn", rs.TestConn),
 
 		req.NewPost("", rs.Save).Log(req.NewLogSave("redis-保存信息")),
 
@@ -45,6 +48,8 @@ func InitRedisRouter(router *gin.RouterGroup) {
 
 		req.NewGet(":id/:db/key-ttl", rs.TtlKey),
 
+		req.NewGet(":id/:db/key-memuse", rs.MemoryUsage),
+
 		req.NewDelete(":id/:db/key", rs.DeleteKey).Log(req.NewLogSave("redis-删除key")).RequiredPermission(deleteDataP),
 
 		req.NewPost(":id/:db/rename-key", rs.RenameKey).Log(req.NewLogSave("redis-重命名key")).RequiredPermission(saveDataP),
@@ -59,7 +64,7 @@ func InitRedisRouter(router *gin.RouterGroup) {
 		req.NewGet(":id/:db/string-value", rs.GetStringValue),
 
 		// 设置string类型值
-		req.NewPost(":id/:db/string-value", rs.SetStringValue).Log(req.NewLogSave("redis-setString")).RequiredPermission(saveDataP),
+		req.NewPost(":id/:db/string-value", rs.SaveStringValue).Log(req.NewLogSave("redis-setString")).RequiredPermission(saveDataP),
 
 		// ———————————————— hash操作 ————————————————
 		req.NewGet(":id/:db/hscan", rs.Hscan),
@@ -71,12 +76,12 @@ func InitRedisRouter(router *gin.RouterGroup) {
 		req.NewDelete(":id/:db/hdel", rs.Hdel).Log(req.NewLogSave("redis-hdel")).RequiredPermission(deleteDataP),
 
 		// 设置hash类型值
-		req.NewPost(":id/:db/hash-value", rs.SetHashValue).Log(req.NewLogSave("redis-setHashValue")).RequiredPermission(saveDataP),
+		req.NewPost(":id/:db/hash-value", rs.SaveHashValue).Log(req.NewLogSave("redis-setHashValue")).RequiredPermission(saveDataP),
 
 		// ---------------  set操作  ----------------
 		req.NewGet(":id/:db/set-value", rs.GetSetValue),
 
-		req.NewPost(":id/:db/set-value", rs.SetSetValue).RequiredPermission(saveDataP),
+		req.NewPost(":id/:db/set-value", rs.SaveSetValue).RequiredPermission(saveDataP),
 
 		req.NewGet(":id/:db/scard", rs.Scard),
 
@@ -91,7 +96,7 @@ func InitRedisRouter(router *gin.RouterGroup) {
 
 		req.NewPost(":id/:db/list-value", rs.SaveListValue).RequiredPermission(saveDataP),
 
-		req.NewPost(":id/:db/list-value/lset", rs.SetListValue).RequiredPermission(saveDataP),
+		req.NewPost(":id/:db/list-value/lset", rs.Lset).RequiredPermission(saveDataP),
 
 		req.NewPost(":id/:db/lrem", rs.Lrem).RequiredPermission(deleteDataP),
 

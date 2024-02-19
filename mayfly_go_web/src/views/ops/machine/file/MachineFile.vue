@@ -5,7 +5,7 @@
 
             <el-row class="mb10">
                 <el-breadcrumb separator-icon="ArrowRight">
-                    <el-breadcrumb-item v-for="path in filePathNav">
+                    <el-breadcrumb-item v-for="path in filePathNav" :key="path">
                         <el-link @click="setFiles(path.path)" style="font-weight: bold">{{ path.name }}</el-link>
                     </el-breadcrumb-item>
                 </el-breadcrumb>
@@ -49,7 +49,7 @@
                                                     :before-upload="beforeUpload"
                                                     :on-success="uploadSuccess"
                                                     action=""
-                                                    :http-request="getUploadFile"
+                                                    :http-request="uploadFile"
                                                     :headers="{ token }"
                                                     :show-file-list="false"
                                                     name="file"
@@ -68,7 +68,7 @@
                                                         ref="folderUploadRef"
                                                         webkitdirectory
                                                         directory
-                                                        @change="getFolder"
+                                                        @change="uploadFolder"
                                                         style="display: none"
                                                     />
                                                 </div>
@@ -131,7 +131,7 @@
                                 <el-button-group v-if="state.copyOrMvFile.paths.length > 0" size="small" class="ml5">
                                     <el-tooltip effect="customized" raw-content placement="top">
                                         <template #content>
-                                            <div v-for="path in state.copyOrMvFile.paths">{{ path }}</div>
+                                            <div v-for="path in state.copyOrMvFile.paths" v-bind:key="path">{{ path }}</div>
                                         </template>
 
                                         <el-button @click="pasteFile" type="primary"
@@ -157,7 +157,7 @@
                             <SvgIcon :size="15" name="document" />
                         </span>
 
-                        <span class="ml5" style="display: inline-block; width: 300px">
+                        <span class="ml5" style="display: inline-block; width: 90%">
                             <div v-if="scope.row.nameEdit">
                                 <el-input
                                     @keyup.enter="fileRename(scope.row)"
@@ -173,7 +173,7 @@
 
                 <el-table-column prop="size" label="大小" width="100" sortable>
                     <template #default="scope">
-                        <span style="color: #67c23a; font-weight: bold" v-if="scope.row.type == '-'"> {{ formatFileSize(scope.row.size) }} </span>
+                        <span style="color: #67c23a; font-weight: bold" v-if="scope.row.type == '-'"> {{ formatByteSize(scope.row.size) }} </span>
                         <span style="color: #67c23a; font-weight: bold" v-if="scope.row.type == 'd' && scope.row.dirSize"> {{ scope.row.dirSize }} </span>
                         <span style="color: #67c23a; font-weight: bold" v-if="scope.row.type == 'd' && !scope.row.dirSize">
                             <el-button @click="getDirSize(scope.row)" type="primary" link :loading="scope.row.loadingDirSize">计算</el-button>
@@ -196,22 +196,24 @@
                     </template>
                     <template #default="scope">
                         <el-link
-                            @click="downloadFile(scope.row)"
-                            v-if="scope.row.type == '-'"
-                            v-auth="'machine:file:write'"
-                            type="primary"
-                            icon="download"
-                            :underline="false"
-                        ></el-link>
-
-                        <el-link
                             @click="deleteFile([scope.row])"
                             v-if="!dontOperate(scope.row)"
                             v-auth="'machine:file:rm'"
                             type="danger"
                             icon="delete"
                             :underline="false"
+                            title="删除"
+                        ></el-link>
+
+                        <el-link
+                            @click="downloadFile(scope.row)"
+                            v-if="scope.row.type == '-'"
+                            v-auth="'machine:file:write'"
+                            type="primary"
+                            icon="download"
+                            :underline="false"
                             class="ml10"
+                            title="下载"
                         ></el-link>
 
                         <el-popover placement="top-start" :title="`${scope.row.path}-文件详情`" :width="520" trigger="click" @show="showFileStat(scope.row)">
@@ -244,10 +246,10 @@
             width="400px"
         >
             <div>
-                <el-form-item prop="name" label="名称:">
+                <el-form-item prop="name" label="名称">
                     <el-input v-model.trim="createFileDialog.name" placeholder="请输入名称" auto-complete="off"></el-input>
                 </el-form-item>
-                <el-form-item prop="type" label="类型:">
+                <el-form-item prop="type" label="类型">
                     <el-radio-group v-model="createFileDialog.type">
                         <el-radio label="d">文件夹</el-radio>
                         <el-radio label="-">文件</el-radio>
@@ -272,11 +274,14 @@ import { ref, toRefs, reactive, onMounted, computed } from 'vue';
 import { ElMessage, ElMessageBox, ElInput } from 'element-plus';
 import { machineApi } from '../api';
 
-import { getToken } from '@/common/utils/storage';
+import { joinClientParams } from '@/common/request';
 import config from '@/common/config';
 import { isTrue } from '@/common/assert';
 import MachineFileContent from './MachineFileContent.vue';
 import { notBlank } from '@/common/assert';
+import { getToken } from '@/common/utils/storage';
+import { formatByteSize, convertToBytes } from '@/common/utils/format';
+import { getMachineConfig } from '@/common/sysconfig';
 
 const props = defineProps({
     machineId: { type: Number },
@@ -289,7 +294,7 @@ const token = getToken();
 const folderUploadRef: any = ref();
 
 const folderType = 'd';
-const fileType = '-';
+
 // 路径分隔符
 const pathSep = '/';
 
@@ -323,14 +328,15 @@ const state = reactive({
         type: folderType,
         data: null as any,
     },
-    file: null as any,
+    machineConfig: { uploadMaxFileSize: '1GB' },
 });
 
 const { basePath, nowPath, loading, fileNameFilter, progressNum, uploadProgressShow, fileContent, createFileDialog } = toRefs(state);
 
-onMounted(() => {
+onMounted(async () => {
     state.basePath = props.path;
     setFiles(props.path);
+    state.machineConfig = await getMachineConfig();
 });
 
 const filterFiles = computed(() =>
@@ -597,6 +603,7 @@ const deleteFile = async (files: any) => {
         ElMessage.success('删除成功');
         refresh();
     } catch (e) {
+        //
     } finally {
         state.loading = false;
     }
@@ -604,7 +611,7 @@ const deleteFile = async (files: any) => {
 
 const downloadFile = (data: any) => {
     const a = document.createElement('a');
-    a.setAttribute('href', `${config.baseApiUrl}/machines/${props.machineId}/files/${props.fileId}/read?type=1&path=${data.path}&token=${token}`);
+    a.setAttribute('href', `${config.baseApiUrl}/machines/${props.machineId}/files/${props.fileId}/download?path=${data.path}&${joinClientParams()}`);
     a.click();
 };
 
@@ -612,20 +619,28 @@ function addFinderToList() {
     folderUploadRef.value.click();
 }
 
-function getFolder(e: any) {
+function uploadFolder(e: any) {
     //e.target.files为文件夹里面的文件
     // 把文件夹数据放到formData里面，下面的files和paths字段根据接口来定
     var form = new FormData();
     form.append('basePath', state.nowPath);
+
+    let totalFileSize = 0;
     for (let file of e.target.files) {
+        totalFileSize += file.size;
         form.append('files', file);
         form.append('paths', file.webkitRelativePath);
     }
+
     try {
+        if (!checkUploadFileSize(totalFileSize)) {
+            return;
+        }
+
         // 上传操作
         machineApi.uploadFile
-            .request(form, {
-                url: `${config.baseApiUrl}/machines/${props.machineId}/files/${props.fileId}/upload-folder?token=${token}`,
+            .xhrReq(form, {
+                url: `${config.baseApiUrl}/machines/${props.machineId}/files/${props.fileId}/upload-folder?${joinClientParams()}`,
                 headers: { 'Content-Type': 'multipart/form-data; boundary=----WebKitFormBoundaryF1uyUD0tWdqmJqpl' },
                 onUploadProgress: onUploadProgress,
                 baseURL: '',
@@ -656,7 +671,7 @@ const onUploadProgress = (progressEvent: any) => {
     state.progressNum = complete;
 };
 
-const getUploadFile = (content: any) => {
+const uploadFile = (content: any) => {
     const params = new FormData();
     const path = state.nowPath;
     params.append('file', content.file);
@@ -665,8 +680,8 @@ const getUploadFile = (content: any) => {
     params.append('fileId', props.fileId as any);
     params.append('token', token);
     machineApi.uploadFile
-        .request(params, {
-            url: `${config.baseApiUrl}/machines/${props.machineId}/files/${props.fileId}/upload?token=${token}`,
+        .xhrReq(params, {
+            url: `${config.baseApiUrl}/machines/${props.machineId}/files/${props.fileId}/upload?${joinClientParams()}`,
             headers: { 'Content-Type': 'multipart/form-data; boundary=----WebKitFormBoundaryF1uyUD0tWdqmJqpl' },
             onUploadProgress: onUploadProgress,
             baseURL: '',
@@ -691,34 +706,22 @@ const uploadSuccess = (res: any) => {
 };
 
 const beforeUpload = (file: File) => {
-    state.file = file;
+    return checkUploadFileSize(file.size);
+};
+
+const checkUploadFileSize = (fileSize: number) => {
+    const bytes = convertToBytes(state.machineConfig.uploadMaxFileSize);
+    if (fileSize > bytes) {
+        ElMessage.error(`上传的文件超过系统配置的[${state.machineConfig.uploadMaxFileSize}]`);
+        return false;
+    }
+    return true;
 };
 
 const dontOperate = (data: any) => {
     const path = data.path;
     const ls = ['/', '//', '/usr', '/usr/', '/usr/bin', '/opt', '/run', '/etc', '/proc', '/var', '/mnt', '/boot', '/dev', '/home', '/media', '/root'];
     return ls.indexOf(path) != -1;
-};
-
-/**
- * 格式化文件大小
- * @param {*} value
- */
-const formatFileSize = (size: any) => {
-    const value = Number(size);
-    if (size && !isNaN(value)) {
-        const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB', 'BB'];
-        let index = 0;
-        let k = value;
-        if (value >= 1024) {
-            while (k > 1024) {
-                k = k / 1024;
-                index++;
-            }
-        }
-        return `${k.toFixed(2)}${units[index]}`;
-    }
-    return '-';
 };
 
 defineExpose({ showFileContent });

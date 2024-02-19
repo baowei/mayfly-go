@@ -1,11 +1,12 @@
 package application
 
-import "mayfly-go/internal/mongo/infrastructure/persistence"
-
-var (
-	mongoApp Mongo = newMongoAppImpl(persistence.GetMongoRepo())
+import (
+	"mayfly-go/internal/mongo/infrastructure/persistence"
+	"mayfly-go/pkg/ioc"
 )
 
-func GetMongoApp() Mongo {
-	return mongoApp
+func InitIoc() {
+	persistence.Init()
+
+	ioc.Register(new(mongoAppImpl), ioc.WithComponentName("MongoApp"))
 }

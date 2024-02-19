@@ -114,7 +114,7 @@
                                     </el-icon>
                                 </el-tooltip>
                             </template>
-                            <el-select class="w100" @change="changeIsIframe" v-model="form.meta.linkType" placeholder="请选择">
+                            <el-select class="w100" @change="changeLinkType" v-model="form.meta.linkType" placeholder="请选择">
                                 <el-option :key="0" label="否" :value="0"> </el-option>
                                 <el-option :key="1" label="内嵌" :value="1"> </el-option>
                                 <el-option :key="2" label="外链" :value="2"> </el-option>
@@ -132,7 +132,7 @@
             <template #footer>
                 <div>
                     <el-button @click="cancel()">取 消</el-button>
-                    <el-button type="primary" :loading="btnLoading" @click="btnOk">确 定</el-button>
+                    <el-button type="primary" :loading="saveBtnLoading" @click="btnOk">确 定</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -222,10 +222,12 @@ const state = reactive({
             link: '',
         },
     },
-    btnLoading: false,
+    submitForm: {},
 });
 
-const { dialogVisible, form, btnLoading } = toRefs(state);
+const { dialogVisible, form, submitForm } = toRefs(state);
+
+const { isFetching: saveBtnLoading, execute: saveResouceExec } = resourceApi.save.useApi(submitForm);
 
 watch(props, (newValue: any) => {
     state.dialogVisible = newValue.visible;
@@ -247,13 +249,9 @@ watch(props, (newValue: any) => {
     state.form.meta.linkType = meta.linkType;
 });
 
-// 改变iframe字段，如果为是，则设置默认的组件
-const changeIsIframe = (value: boolean) => {
-    if (value) {
-        state.form.meta.component = 'layout/routerView/parent';
-    } else {
-        state.form.meta.component = '';
-    }
+// 改变外链类型
+const changeLinkType = () => {
+    state.form.meta.component = '';
 };
 
 const btnOk = () => {
@@ -264,20 +262,15 @@ const btnOk = () => {
     } else {
         submitForm.meta = null as any;
     }
-    menuForm.value.validate((valid: any) => {
-        if (valid) {
-            resourceApi.save.request(submitForm).then(() => {
-                emit('val-change', submitForm);
-                state.btnLoading = true;
-                ElMessage.success('保存成功');
-                setTimeout(() => {
-                    state.btnLoading = false;
-                }, 1000);
 
-                cancel();
-            });
-        } else {
-            return false;
+    menuForm.value.validate(async (valid: any) => {
+        if (valid) {
+            state.submitForm = submitForm;
+            await saveResouceExec();
+
+            emit('val-change', submitForm);
+            ElMessage.success('保存成功');
+            cancel();
         }
     });
 };

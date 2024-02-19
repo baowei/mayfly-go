@@ -1,19 +1,16 @@
 <template>
     <div class="db-sql-exec-log">
         <page-table
+            ref="pageTableRef"
+            :page-api="dbApi.getSqlExecs"
+            :lazy="true"
             height="100%"
-            ref="sqlExecDialogPageTableRef"
-            :query="queryConfig"
+            :search-items="searchItems"
             v-model:query-form="query"
-            :data="data"
             :columns="columns"
-            :total="total"
-            v-model:page-size="query.pageSize"
-            v-model:page-num="query.pageNum"
-            @pageChange="searchSqlExecLog()"
         >
             <template #dbSelect>
-                <el-select v-model="query.db" placeholder="请选择数据库" style="width: 200px" filterable clearable>
+                <el-select v-model="query.db" placeholder="请选择数据库" filterable clearable>
                     <el-option v-for="item in dbs" :key="item" :label="`${item}`" :value="item"> </el-option>
                 </el-select>
             </template>
@@ -39,11 +36,12 @@
 </template>
 
 <script lang="ts" setup>
-import { ref, toRefs,watch, reactive, computed, onMounted, defineAsyncComponent } from 'vue';
+import { onMounted, reactive, Ref, ref, toRefs, watch } from 'vue';
 import { dbApi } from './api';
 import { DbSqlExecTypeEnum } from './enums';
 import PageTable from '@/components/pagetable/PageTable.vue';
-import { TableColumn, TableQuery } from '@/components/pagetable';
+import { TableColumn } from '@/components/pagetable';
+import { SearchItem } from '@/components/SearchForm';
 
 const props = defineProps({
     dbId: {
@@ -56,13 +54,13 @@ const props = defineProps({
     },
 });
 
-const queryConfig = [
-    TableQuery.slot('db', '数据库', 'dbSelect'),
-    TableQuery.text('table', '表名'),
-    TableQuery.select('type', '操作类型').setOptions(Object.values(DbSqlExecTypeEnum)),
+const searchItems = [
+    SearchItem.slot('db', '数据库', 'dbSelect'),
+    SearchItem.input('table', '表名'),
+    SearchItem.select('type', '操作类型').withEnum(DbSqlExecTypeEnum),
 ];
 
-const columns = [
+const columns = ref([
     TableColumn.new('db', '数据库'),
     TableColumn.new('table', '表'),
     TableColumn.new('type', '类型').typeTag(DbSqlExecTypeEnum).setAddWidth(10),
@@ -72,11 +70,11 @@ const columns = [
     TableColumn.new('createTime', '执行时间').isTime(),
     TableColumn.new('remark', '备注'),
     TableColumn.new('action', '操作').isSlot().setMinWidth(90).fixedRight().alignCenter(),
-];
+]);
+
+const pageTableRef: Ref<any> = ref(null);
 
 const state = reactive({
-    data: [],
-    total: 0,
     dbs: [],
     query: {
         dbId: 0,
@@ -97,28 +95,36 @@ const state = reactive({
     },
 });
 
-const { data, query, total, rollbackSqlDialog } = toRefs(state);
+const { query, rollbackSqlDialog } = toRefs(state);
 
 onMounted(async () => {
-    searchSqlExecLog();
-});
-
-watch(props, async (newValue: any) => {
+    state.query.dbId = props.dbId;
+    state.query.pageNum = 1;
     await searchSqlExecLog();
 });
 
+watch(props, async () => {
+    state.query.dbId = props.dbId;
+    state.query.pageNum = 1;
+    await searchSqlExecLog();
+});
 
 const searchSqlExecLog = async () => {
-    state.query.dbId = props.dbId
-    const res = await dbApi.getSqlExecs.request(state.query);
-    state.data = res.list;
-    state.total = res.total;
+    if (state.query.dbId) {
+        pageTableRef.value.search();
+    }
 };
 
 const onShowRollbackSql = async (sqlExecLog: any) => {
     const columns = await dbApi.columnMetadata.request({ id: sqlExecLog.dbId, db: sqlExecLog.db, tableName: sqlExecLog.table });
     const primaryKey = getPrimaryKey(columns);
     const oldValue = JSON.parse(sqlExecLog.oldValue);
+
+    let schema = '';
+    let dbArr = sqlExecLog.db.split('/');
+    if (dbArr.length == 2) {
+        schema = dbArr[1] + '.';
+    }
 
     const rollbackSqls = [];
     if (sqlExecLog.type == DbSqlExecTypeEnum.Update.value) {
@@ -130,7 +136,7 @@ const onShowRollbackSql = async (sqlExecLog: any) => {
                 }
                 setItems.push(`${key} = ${wrapValue(ov[key])}`);
             }
-            rollbackSqls.push(`UPDATE ${sqlExecLog.table} SET ${setItems.join(', ')} WHERE ${primaryKey} = ${wrapValue(ov[primaryKey])};`);
+            rollbackSqls.push(`UPDATE ${schema}${sqlExecLog.table} SET ${setItems.join(', ')} WHERE ${primaryKey} = ${wrapValue(ov[primaryKey])};`);
         }
     } else if (sqlExecLog.type == DbSqlExecTypeEnum.Delete.value) {
         const columnNames = columns.map((c: any) => c.columnName);
@@ -139,7 +145,7 @@ const onShowRollbackSql = async (sqlExecLog: any) => {
             for (let column of columnNames) {
                 values.push(wrapValue(ov[column]));
             }
-            rollbackSqls.push(`INSERT INTO ${sqlExecLog.table} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`);
+            rollbackSqls.push(`INSERT INTO ${schema}${sqlExecLog.table} (${columnNames.join(', ')}) VALUES (${values.join(', ')});`);
         }
     }
 
@@ -148,7 +154,7 @@ const onShowRollbackSql = async (sqlExecLog: any) => {
 };
 
 const getPrimaryKey = (columns: any) => {
-    const col = columns.find((c: any) => c.columnKey == 'PRI');
+    const col = columns.find((c: any) => c.isPrimaryKey);
     if (col) {
         return col.columnName;
     }

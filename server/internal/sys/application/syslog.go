@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"mayfly-go/internal/sys/domain/entity"
 	"mayfly-go/internal/sys/domain/repository"
-	"mayfly-go/pkg/biz"
+	"mayfly-go/pkg/contextx"
+	"mayfly-go/pkg/errorx"
 	"mayfly-go/pkg/model"
 	"mayfly-go/pkg/req"
 	"mayfly-go/pkg/utils/anyx"
@@ -13,28 +14,22 @@ import (
 )
 
 type Syslog interface {
-	GetPageList(condition *entity.SysLogQuery, pageParam *model.PageParam, toEntity any, orderBy ...string) *model.PageResult[any]
+	GetPageList(condition *entity.SysLogQuery, pageParam *model.PageParam, toEntity any, orderBy ...string) (*model.PageResult[any], error)
 
 	// 从请求上下文的参数保存系统日志
 	SaveFromReq(req *req.Ctx)
 }
 
-func newSyslogApp(syslogRepo repository.Syslog) Syslog {
-	return &syslogAppImpl{
-		syslogRepo: syslogRepo,
-	}
-}
-
 type syslogAppImpl struct {
-	syslogRepo repository.Syslog
+	SyslogRepo repository.Syslog `inject:""`
 }
 
-func (m *syslogAppImpl) GetPageList(condition *entity.SysLogQuery, pageParam *model.PageParam, toEntity any, orderBy ...string) *model.PageResult[any] {
-	return m.syslogRepo.GetPageList(condition, pageParam, toEntity, orderBy...)
+func (m *syslogAppImpl) GetPageList(condition *entity.SysLogQuery, pageParam *model.PageParam, toEntity any, orderBy ...string) (*model.PageResult[any], error) {
+	return m.SyslogRepo.GetPageList(condition, pageParam, toEntity, orderBy...)
 }
 
 func (m *syslogAppImpl) SaveFromReq(req *req.Ctx) {
-	lg := req.LoginAccount
+	lg := contextx.GetLoginAccount(req.MetaCtx)
 	if lg == nil {
 		lg = &model.LoginAccount{Id: 0, Username: "-"}
 	}
@@ -42,9 +37,10 @@ func (m *syslogAppImpl) SaveFromReq(req *req.Ctx) {
 	syslog.CreateTime = time.Now()
 	syslog.Creator = lg.Username
 	syslog.CreatorId = lg.Id
-	syslog.Description = req.GetLogInfo().Description
 
-	if req.GetLogInfo().LogResp {
+	logInfo := req.GetLogInfo()
+	syslog.Description = logInfo.Description
+	if logInfo.LogResp {
 		respB, _ := json.Marshal(req.ResData)
 		syslog.Resp = string(respB)
 	}
@@ -64,7 +60,7 @@ func (m *syslogAppImpl) SaveFromReq(req *req.Ctx) {
 		syslog.Type = entity.SyslogTypeError
 		var errMsg string
 		switch t := err.(type) {
-		case *biz.BizError:
+		case errorx.BizError:
 			errMsg = fmt.Sprintf("errCode: %d, errMsg: %s", t.Code(), t.Error())
 		case error:
 			errMsg = t.Error()
@@ -74,5 +70,5 @@ func (m *syslogAppImpl) SaveFromReq(req *req.Ctx) {
 		syslog.Type = entity.SyslogTypeNorman
 	}
 
-	m.syslogRepo.Insert(syslog)
+	m.SyslogRepo.Insert(req.MetaCtx, syslog)
 }

@@ -2,8 +2,8 @@ package router
 
 import (
 	"mayfly-go/internal/mongo/api"
-	"mayfly-go/internal/mongo/application"
-	tagapp "mayfly-go/internal/tag/application"
+	"mayfly-go/pkg/biz"
+	"mayfly-go/pkg/ioc"
 	"mayfly-go/pkg/req"
 
 	"github.com/gin-gonic/gin"
@@ -12,18 +12,21 @@ import (
 func InitMongoRouter(router *gin.RouterGroup) {
 	m := router.Group("mongos")
 
-	ma := &api.Mongo{
-		MongoApp: application.GetMongoApp(),
-		TagApp:   tagapp.GetTagTreeApp(),
-	}
+	ma := new(api.Mongo)
+	biz.ErrIsNil(ioc.Inject(ma))
+
+	dashbord := new(api.Dashbord)
+	biz.ErrIsNil(ioc.Inject(dashbord))
 
 	saveDataPerm := req.NewPermission("mongo:data:save")
 
 	reqs := [...]*req.Conf{
+		req.NewGet("dashbord", dashbord.Dashbord),
+
 		// 获取所有mongo列表
 		req.NewGet("", ma.Mongos),
 
-		req.NewGet("/tags", ma.MongoTags),
+		req.NewPost("/test-conn", ma.TestConn),
 
 		req.NewPost("", ma.Save).Log(req.NewLogSave("mongo-保存信息")),
 

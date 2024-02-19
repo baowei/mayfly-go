@@ -21,13 +21,10 @@ type MachineCronJob struct {
 
 // 计划任务与机器关联信息
 type MachineCronJobRelate struct {
-	model.DeletedModel
+	model.CreateModel
 
-	CronJobId  uint64
-	MachineId  uint64
-	Creator    string
-	CreatorId  uint64
-	CreateTime *time.Time
+	CronJobId uint64
+	MachineId uint64
 }
 
 // 机器任务执行记录

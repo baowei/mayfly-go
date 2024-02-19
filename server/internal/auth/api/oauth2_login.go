@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"mayfly-go/internal/auth/api/vo"
@@ -12,8 +13,10 @@ import (
 	sysentity "mayfly-go/internal/sys/domain/entity"
 	"mayfly-go/pkg/biz"
 	"mayfly-go/pkg/cache"
+	"mayfly-go/pkg/errorx"
 	"mayfly-go/pkg/model"
 	"mayfly-go/pkg/req"
+	"mayfly-go/pkg/utils/collx"
 	"mayfly-go/pkg/utils/jsonx"
 	"mayfly-go/pkg/utils/stringx"
 	"net/http"
@@ -25,9 +28,9 @@ import (
 )
 
 type Oauth2Login struct {
-	Oauth2App  application.Oauth2
-	AccountApp sysapp.Account
-	MsgApp     msgapp.Msg
+	Oauth2App  application.Oauth2 `inject:""`
+	AccountApp sysapp.Account     `inject:""`
+	MsgApp     msgapp.Msg         `inject:""`
 }
 
 func (a *Oauth2Login) OAuth2Login(rc *req.Ctx) {
@@ -40,7 +43,7 @@ func (a *Oauth2Login) OAuth2Login(rc *req.Ctx) {
 func (a *Oauth2Login) OAuth2Bind(rc *req.Ctx) {
 	client, _ := a.getOAuthClient()
 	state := stringx.Rand(32)
-	cache.SetStr("oauth2:state:"+state, "bind:"+strconv.FormatUint(rc.LoginAccount.Id, 10),
+	cache.SetStr("oauth2:state:"+state, "bind:"+strconv.FormatUint(rc.GetLoginAccount().Id, 10),
 		5*time.Minute)
 	rc.GinCtx.Redirect(http.StatusFound, client.AuthCodeURL(state))
 }
@@ -96,9 +99,9 @@ func (a *Oauth2Login) OAuth2Callback(rc *req.Ctx) {
 
 		account := new(sysentity.Account)
 		account.Id = accountId
-		err = a.AccountApp.GetAccount(account, "username")
+		err = a.AccountApp.GetBy(account, "username")
 		biz.ErrIsNilAppendErr(err, "该账号不存在")
-		rc.ReqParam = jsonx.Kvs("username", account.Username, "type", "bind")
+		rc.ReqParam = collx.Kvs("username", account.Username, "type", "bind")
 
 		err = a.Oauth2App.GetOAuthAccount(&entity.Oauth2Account{
 			AccountId: accountId,
@@ -118,13 +121,13 @@ func (a *Oauth2Login) OAuth2Callback(rc *req.Ctx) {
 			UpdateTime: &now,
 		})
 		biz.ErrIsNilAppendErr(err, "绑定用户失败: %s")
-		res := map[string]any{
+		res := collx.M{
 			"action": "oauthBind",
 			"bind":   true,
 		}
 		rc.ResData = res
 	} else {
-		panic(biz.NewBizErr("state不合法"))
+		panic(errorx.NewBiz("state不合法"))
 	}
 }
 
@@ -150,7 +153,7 @@ func (a *Oauth2Login) doLoginAction(rc *req.Ctx, userId string, oauth *config.Oa
 			Name:     userId,
 			Username: userId,
 		}
-		a.AccountApp.Create(account)
+		biz.ErrIsNil(a.AccountApp.Create(context.TODO(), account))
 		// 绑定
 		err := a.Oauth2App.BindOAuthAccount(&entity.Oauth2Account{
 			AccountId:  account.Id,
@@ -166,14 +169,11 @@ func (a *Oauth2Login) doLoginAction(rc *req.Ctx, userId string, oauth *config.Oa
 	}
 
 	// 进行登录
-	account := &sysentity.Account{
-		Model: model.Model{DeletedModel: model.DeletedModel{Id: accountId}},
-	}
-	err = a.AccountApp.GetAccount(account, "Id", "Name", "Username", "Password", "Status", "LastLoginTime", "LastLoginIp", "OtpSecret")
+	account, err := a.AccountApp.GetById(new(sysentity.Account), accountId, "Id", "Name", "Username", "Password", "Status", "LastLoginTime", "LastLoginIp", "OtpSecret")
 	biz.ErrIsNilAppendErr(err, "获取用户信息失败: %s")
 
 	clientIp := getIpAndRegion(rc)
-	rc.ReqParam = jsonx.Kvs("username", account.Username, "ip", clientIp, "type", "login")
+	rc.ReqParam = collx.Kvs("username", account.Username, "ip", clientIp, "type", "login")
 
 	res := LastLoginCheck(account, config.GetAccountLoginSecurity(), clientIp)
 	res["action"] = "oauthLogin"
@@ -205,7 +205,7 @@ func (a *Oauth2Login) Oauth2Status(ctx *req.Ctx) {
 	res.Enable = oauth2LoginConfig.Enable
 	if res.Enable {
 		err := a.Oauth2App.GetOAuthAccount(&entity.Oauth2Account{
-			AccountId: ctx.LoginAccount.Id,
+			AccountId: ctx.GetLoginAccount().Id,
 		}, "account_id", "identity")
 		res.Bind = err == nil
 	}
@@ -214,13 +214,13 @@ func (a *Oauth2Login) Oauth2Status(ctx *req.Ctx) {
 }
 
 func (a *Oauth2Login) Oauth2Unbind(rc *req.Ctx) {
-	a.Oauth2App.Unbind(rc.LoginAccount.Id)
+	a.Oauth2App.Unbind(rc.GetLoginAccount().Id)
 }
 
 // 获取oauth2登录配置信息，因为有些字段是敏感字段，故单独使用接口获取
 func (c *Oauth2Login) Oauth2Config(rc *req.Ctx) {
 	oauth2LoginConfig := config.GetOauth2Login()
-	rc.ResData = map[string]any{
+	rc.ResData = collx.M{
 		"enable": oauth2LoginConfig.Enable,
 		"name":   oauth2LoginConfig.Name,
 	}

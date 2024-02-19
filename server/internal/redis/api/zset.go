@@ -6,12 +6,13 @@ import (
 	"mayfly-go/pkg/biz"
 	"mayfly-go/pkg/ginx"
 	"mayfly-go/pkg/req"
+	"mayfly-go/pkg/utils/collx"
 
 	"github.com/redis/go-redis/v9"
 )
 
 func (r *Redis) ZCard(rc *req.Ctx) {
-	ri, key := r.checkKeyAndGetRedisIns(rc)
+	ri, key := r.checkKeyAndGetRedisConn(rc)
 
 	total, err := ri.GetCmdable().ZCard(context.TODO(), key).Result()
 	biz.ErrIsNilAppendErr(err, "zcard失败: %s")
@@ -20,7 +21,7 @@ func (r *Redis) ZCard(rc *req.Ctx) {
 
 func (r *Redis) ZScan(rc *req.Ctx) {
 	g := rc.GinCtx
-	ri, key := r.checkKeyAndGetRedisIns(rc)
+	ri, key := r.checkKeyAndGetRedisConn(rc)
 
 	cursor := uint64(ginx.QueryInt(g, "cursor", 0))
 	match := ginx.Query(g, "match", "*")
@@ -28,7 +29,7 @@ func (r *Redis) ZScan(rc *req.Ctx) {
 
 	keys, cursor, err := ri.GetCmdable().ZScan(context.TODO(), key, cursor, match, int64(count)).Result()
 	biz.ErrIsNilAppendErr(err, "sscan失败: %s")
-	rc.ResData = map[string]any{
+	rc.ResData = collx.M{
 		"keys":   keys,
 		"cursor": cursor,
 	}
@@ -36,7 +37,7 @@ func (r *Redis) ZScan(rc *req.Ctx) {
 
 func (r *Redis) ZRevRange(rc *req.Ctx) {
 	g := rc.GinCtx
-	ri, key := r.checkKeyAndGetRedisIns(rc)
+	ri, key := r.checkKeyAndGetRedisConn(rc)
 	start := ginx.QueryInt(g, "start", 0)
 	stop := ginx.QueryInt(g, "stop", 50)
 
@@ -50,7 +51,7 @@ func (r *Redis) ZRem(rc *req.Ctx) {
 	option := new(form.SmemberOption)
 	ginx.BindJsonAndValid(g, option)
 
-	cmd := r.getRedisIns(rc).GetCmdable()
+	cmd := r.getRedisConn(rc).GetCmdable()
 	res, err := cmd.ZRem(context.TODO(), option.Key, option.Member).Result()
 	biz.ErrIsNilAppendErr(err, "zrem失败: %s")
 	rc.ResData = res
@@ -61,7 +62,7 @@ func (r *Redis) ZAdd(rc *req.Ctx) {
 	option := new(form.ZAddOption)
 	ginx.BindJsonAndValid(g, option)
 
-	cmd := r.getRedisIns(rc).GetCmdable()
+	cmd := r.getRedisConn(rc).GetCmdable()
 	zm := redis.Z{
 		Score:  option.Score,
 		Member: option.Member,

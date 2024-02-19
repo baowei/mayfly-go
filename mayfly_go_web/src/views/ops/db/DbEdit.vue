@@ -10,16 +10,27 @@
             width="38%"
         >
             <el-form :model="form" ref="dbForm" :rules="rules" label-width="auto">
-                <el-form-item prop="tagId" label="标签:" required>
-                    <tag-select v-model="form.tagId" v-model:tag-path="form.tagPath" style="width: 100%" />
+                <el-form-item ref="tagSelectRef" prop="tagId" label="标签" required>
+                    <tag-tree-select
+                        @change-tag="
+                            (tagIds) => {
+                                form.tagId = tagIds;
+                                tagSelectRef.validate();
+                            }
+                        "
+                        multiple
+                        :resource-code="form.code"
+                        :resource-type="TagResourceTypeEnum.Db.value"
+                        style="width: 100%"
+                    />
                 </el-form-item>
 
-                <el-form-item prop="instanceId" label="数据库实例:" required>
+                <el-form-item prop="instanceId" label="数据库实例" required>
                     <el-select
                         :disabled="form.id !== undefined"
                         remote
                         :remote-method="getInstances"
-                        @change="getAllDatabase"
+                        @change="changeInstance"
                         v-model="form.instanceId"
                         placeholder="请输入实例名称搜索并选择实例"
                         filterable
@@ -37,28 +48,31 @@
                     </el-select>
                 </el-form-item>
 
-                <el-form-item prop="name" label="别名:" required>
+                <el-form-item prop="name" label="别名" required>
                     <el-input v-model.trim="form.name" placeholder="请输入数据库别名" auto-complete="off"></el-input>
                 </el-form-item>
 
-                <el-form-item prop="database" label="数据库名:" required>
+                <el-form-item prop="database" label="数据库名">
                     <el-select
-                        @change="changeDatabase"
-                        v-model="databaseList"
+                        v-model="dbNamesSelected"
                         multiple
                         clearable
                         collapse-tags
                         collapse-tags-tooltip
                         filterable
+                        :filter-method="filterDbNames"
                         allow-create
                         placeholder="请确保数据库实例信息填写完整后获取库名"
                         style="width: 100%"
                     >
-                        <el-option v-for="db in allDatabases" :key="db" :label="db" :value="db" />
+                        <template #header>
+                            <el-checkbox v-model="checkAllDbNames" :indeterminate="indeterminateDbNames" @change="handleCheckAll"> 全选 </el-checkbox>
+                        </template>
+                        <el-option v-for="db in state.dbNamesFiltered" :key="db" :label="db" :value="db" />
                     </el-select>
                 </el-form-item>
 
-                <el-form-item prop="remark" label="备注:">
+                <el-form-item prop="remark" label="备注">
                     <el-input v-model.trim="form.remark" auto-complete="off" type="textarea"></el-input>
                 </el-form-item>
             </el-form>
@@ -66,7 +80,7 @@
             <template #footer>
                 <div class="dialog-footer">
                     <el-button @click="cancel()">取 消</el-button>
-                    <el-button type="primary" :loading="btnLoading" @click="btnOk">确 定</el-button>
+                    <el-button type="primary" :loading="saveBtnLoading" @click="btnOk">确 定</el-button>
                 </div>
             </template>
         </el-dialog>
@@ -77,7 +91,9 @@
 import { toRefs, reactive, watch, ref } from 'vue';
 import { dbApi } from './api';
 import { ElMessage } from 'element-plus';
-import TagSelect from '../component/TagSelect.vue';
+import TagTreeSelect from '../component/TagTreeSelect.vue';
+import { TagResourceTypeEnum } from '@/common/commonEnum';
+import type { CheckboxValueType } from 'element-plus';
 
 const props = defineProps({
     visible: {
@@ -127,47 +143,53 @@ const rules = {
     ],
 };
 
+const checkAllDbNames = ref(false);
+const indeterminateDbNames = ref(false);
+
 const dbForm: any = ref(null);
+const tagSelectRef: any = ref(null);
 
 const state = reactive({
     dialogVisible: false,
     allDatabases: [] as any,
-    databaseList: [] as any,
+    dbNamesSelected: [] as any,
+    dbNamesFiltered: [] as any,
+    filterString: '',
     form: {
         id: null,
-        tagId: null as any,
-        tagPath: null as any,
+        tagId: [],
         name: null,
+        code: '',
         database: '',
         remark: '',
         instanceId: null as any,
     },
-    btnLoading: false,
     instances: [] as any,
 });
 
-const { dialogVisible, allDatabases, databaseList, form, btnLoading } = toRefs(state);
+const { dialogVisible, allDatabases, form, dbNamesSelected } = toRefs(state);
 
-watch(props, (newValue: any) => {
+const { isFetching: saveBtnLoading, execute: saveDbExec } = dbApi.saveDb.useApi(form);
+
+watch(props, async (newValue: any) => {
     state.dialogVisible = newValue.visible;
     if (!state.dialogVisible) {
         return;
     }
     if (newValue.db) {
         state.form = { ...newValue.db };
+
         // 将数据库名使用空格切割，获取所有数据库列表
-        state.databaseList = newValue.db.database.split(' ');
+        state.dbNamesSelected = newValue.db.database.split(' ');
     } else {
         state.form = {} as any;
-        state.databaseList = [];
+        state.dbNamesSelected = [];
     }
 });
 
-/**
- * 改变表单中的数据库字段，方便表单错误提示。如全部删光，可提示请添加数据库
- */
-const changeDatabase = () => {
-    state.form.database = state.databaseList.length == 0 ? '' : state.databaseList.join(' ');
+const changeInstance = () => {
+    state.dbNamesSelected = [];
+    getAllDatabase();
 };
 
 const getAllDatabase = async () => {
@@ -190,34 +212,27 @@ const getInstances = async (instanceName: string = '', id = 0) => {
 const open = async () => {
     if (state.form.instanceId) {
         // 根据id获取，因为需要回显实例名称
-        getInstances('', state.form.instanceId);
+        await getInstances('', state.form.instanceId);
     }
     await getAllDatabase();
 };
 
 const btnOk = async () => {
     dbForm.value.validate(async (valid: boolean) => {
-        if (valid) {
-            const reqForm = { ...state.form };
-            dbApi.saveDb.request(reqForm).then(() => {
-                ElMessage.success('保存成功');
-                emit('val-change', state.form);
-                state.btnLoading = true;
-                setTimeout(() => {
-                    state.btnLoading = false;
-                }, 1000);
-
-                cancel();
-            });
-        } else {
+        if (!valid) {
             ElMessage.error('请正确填写信息');
             return false;
         }
+
+        await saveDbExec();
+        ElMessage.success('保存成功');
+        emit('val-change', state.form);
+        cancel();
     });
 };
 
 const resetInputDb = () => {
-    state.databaseList = [];
+    state.dbNamesSelected = [];
     state.allDatabases = [];
     state.instances = [];
 };
@@ -228,6 +243,63 @@ const cancel = () => {
     setTimeout(() => {
         resetInputDb();
     }, 500);
+};
+
+const checkDbSelect = (val: string[]) => {
+    const selected = val.filter((dbName: string) => {
+        return dbName.includes(state.filterString);
+    });
+    if (selected.length === 0) {
+        checkAllDbNames.value = false;
+        indeterminateDbNames.value = false;
+        return;
+    }
+    if (selected.length === state.dbNamesFiltered.length) {
+        checkAllDbNames.value = true;
+        indeterminateDbNames.value = false;
+        return;
+    }
+    indeterminateDbNames.value = true;
+};
+
+watch(dbNamesSelected, (val: string[]) => {
+    checkDbSelect(val);
+    state.form.database = val.join(' ');
+});
+
+watch(allDatabases, (val: string[]) => {
+    state.dbNamesFiltered = val.map((dbName: string) => dbName);
+});
+
+const handleCheckAll = (val: CheckboxValueType) => {
+    const otherSelected = state.dbNamesSelected.filter((dbName: string) => {
+        return !state.dbNamesFiltered.includes(dbName);
+    });
+    if (val) {
+        state.dbNamesSelected = otherSelected.concat(state.dbNamesFiltered);
+    } else {
+        state.dbNamesSelected = otherSelected;
+    }
+};
+
+const filterDbNames = (filterString: string) => {
+    const dbNamesCreated = state.dbNamesSelected.filter((dbName: string) => {
+        return !state.allDatabases.includes(dbName);
+    });
+    if (filterString.length === 0) {
+        state.dbNamesFiltered = dbNamesCreated.concat(state.allDatabases);
+        checkDbSelect(state.dbNamesSelected);
+        return;
+    }
+    state.dbNamesFiltered = dbNamesCreated.concat(state.allDatabases).filter((dbName: string) => {
+        if (dbName == filterString) {
+            return false;
+        }
+        return dbName.includes(filterString);
+    });
+    state.dbNamesFiltered.unshift(filterString);
+    state.filterString = filterString;
+    checkDbSelect(state.dbNamesSelected);
 };
 </script>
 <style lang="scss"></style>
